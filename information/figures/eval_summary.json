@@ -1,0 +1,22 @@
+[
+  {
+    "experiment_id": "smoke_random_b10_epoch1",
+    "split": "val",
+    "precision": 0.5409,
+    "recall": 0.7894,
+    "f1": 0.6419,
+    "tp": 761,
+    "fp": 646,
+    "fn": 203
+  },
+  {
+    "experiment_id": "smoke_random_b10_epoch1",
+    "split": "test",
+    "precision": 0.6225,
+    "recall": 0.9402,
+    "f1": 0.7491,
+    "tp": 1494,
+    "fp": 906,
+    "fn": 95
+  }
+]

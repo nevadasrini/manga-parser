@@ -2,7 +2,7 @@
 
 Tools to load **Manga109** from a local folder (XML + images), convert **panels (`frame`) and speech bubbles (`text`)** to **YOLO** labels, and train **Ultralytics YOLOv8** on that dataset.
 
-**CNN / training variables glossary + val vs test comparison figures:** see [`information/cnn_training_variables.md`](information/cnn_training_variables.md) and regenerated plots under **`information/figures/`** (`plot_training_comparisons.py`).
+<!-- **CNN / training variables glossary + val vs test comparison figures:** see [`information/cnn_training_variables.md`](information/cnn_training_variables.md) and regenerated plots under **`information/figures/`** (`plot_training_comparisons.py`). -->
 
 This repo does **not** call `datasets.load_dataset` itself. You **download** data with the Hugging Face CLI (or copy an official release), then point scripts at the directory that contains **`images/`** and **`annotations/`**.
 
@@ -174,6 +174,16 @@ If you trained with **`--project runs`** (legacy), weights may live under **`run
 
 Use **`--split test`** for held-out volumes from the manifest. To compare runs, fix **`--iou`**, **`--conf`**, split, and the manifest **`seed`/mode**.
 
+### Comparison figures (`plot_training_comparisons.py`)
+
+ **`information/experiments_for_plots.yaml`** lists checkpoints and `yolo_root`; **`splits`** picks which folders to score (default **`train`**, **`val`**, **`test`**, so bar charts show **training**, **validation**, and **test** precision / recall / F1 using the **same** greedy IoU-on-annotations definition as in **`evaluate_yolo_*.py`** — not Ultralytics’ internal epoch logs). Omit **`train`** from that list if you only want validation and test and a faster run.
+
+**What is F1?** **Precision** is how often predicted boxes align with annotations; **recall** is what fraction of true boxes were found. **F1** is their harmonic mean: **2 × precision × recall / (precision + recall)**. It stays high only when neither false alarms nor missed boxes dominate.
+
+```bash
+python information/plot_training_comparisons.py
+```
+
 ### Reference run (logged in-repo — subset + 1 epoch, not a benchmark)
 
 These numbers are **illustrative** (10 books alphabetically, 1 epoch, small `imgsz=320`). Re-train fully for thesis-quality metrics.
@@ -210,7 +220,7 @@ For **all 109 books**, omit **`--max-books`**, use a new **`--output_dir`** and 
 | **`train_yolo.py`** | Fine-tunes **`yolov8s.pt`**. CLI: **`--data`**, **`--weights`**, **`--epochs`**, **`--batch`**, **`--imgsz`**, **`--device`**, **`--project`** (default `runs/detect`), **`--name`**, **`--exist-ok`**, **`--workers`**. |
 | **`evaluate_yolo_panels.py`** | **Panel (class 0)** vs Manga109 **`<frame>`** GT — calls **`panel_eval_lib`**. |
 | **`panel_eval_lib.py`** | Shared evaluator used by **`evaluate_yolo_panels.py`** and **`information/plot_training_comparisons.py`**. |
-| **`information/plot_training_comparisons.py`** | Reads **`information/experiments_for_plots.yaml`**, draws **bar + TP/FP/FN matrices** (`information/figures/*.png`) + **`eval_summary.json`**. |
+| **`information/plot_training_comparisons.py`** | Reads YAML (**`splits`**: train/val/test → grouped bars + matrices), writes figures + **`eval_summary_*.json`**. |
 | **`information/cnn_training_variables.md`** | What each CNN / split / eval variable means and why. |
 | **`information/experiments_for_plots.yaml`** | List checkpoints + **`yolo_root`** per experiment to compare (copy from **`.example.yaml`**). |
 | **`requirements.txt`** | Pin-style deps for `pip install -r requirements.txt`. |

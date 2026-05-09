@@ -1,0 +1,25 @@
+task: panel
+output_suffix: bm_ep1_mps_s42_rand_b3_0508_2158
+data_root: data/raw/manga109/Manga109_released_2023_12_07
+iou: 0.5
+conf: 0.25
+panel_class: 0
+splits:
+- val
+- test
+experiments:
+- id: panel_input_raw
+  weights: runs/detect/bm_ep1_mps_s42_rand_b3_0508_2158_raw/weights/best.pt
+  yolo_root: data/processed/panel_benchmark_bm_ep1_mps_s42_rand_b3_0508_2158/yolo_raw
+- id: panel_input_preprocess_only
+  weights: runs/detect/bm_ep1_mps_s42_rand_b3_0508_2158_preprocess_only/weights/best.pt
+  yolo_root: data/processed/panel_benchmark_bm_ep1_mps_s42_rand_b3_0508_2158/yolo_preprocess_only
+- id: panel_input_preprocess_edges
+  weights: runs/detect/bm_ep1_mps_s42_rand_b3_0508_2158_preprocess_edges/weights/best.pt
+  yolo_root: data/processed/panel_benchmark_bm_ep1_mps_s42_rand_b3_0508_2158/yolo_preprocess_edges
+- id: panel_input_preprocess_repair_edges
+  weights: runs/detect/bm_ep1_mps_s42_rand_b3_0508_2158_preprocess_repair_edges/weights/best.pt
+  yolo_root: data/processed/panel_benchmark_bm_ep1_mps_s42_rand_b3_0508_2158/yolo_preprocess_repair_edges
+- id: panel_input_edges_repair_only
+  weights: runs/detect/bm_ep1_mps_s42_rand_b3_0508_2158_edges_repair_only/weights/best.pt
+  yolo_root: data/processed/panel_benchmark_bm_ep1_mps_s42_rand_b3_0508_2158/yolo_edges_repair_only

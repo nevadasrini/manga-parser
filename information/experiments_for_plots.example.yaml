@@ -1,0 +1,41 @@
+# Copy to experiments_for_plots.yaml and edit paths relative to manga-parser/.
+# Each experiment = one trained .pt + the YOLO export folder built with its manifest.
+
+data_root: data/raw/manga109/Manga109_released_2023_12_07
+iou: 0.5
+conf: 0.25
+panel_class: 0
+# Include ``train`` to add training-set bars/matrices alongside val and test.
+splits:
+  - train
+  - val
+  - test
+
+experiments:
+  # Optional human-readable caption for plots (short). If omitted, ids are shortened automatically.
+  - id: smoke_random_b10_epoch1
+    label: Smoke test · 10 books
+    weights: runs/detect/runs/manga109_smoke/weights/best.pt
+    yolo_root: data/processed/manga109_yolo_smoke
+
+  # Classical-pipeline image exports (see export_all_image_variants.py, train_yolo --name manga109_<v>)
+  - id: panel_input_raw
+    label: Raw pages
+    weights: runs/detect/manga109_raw/weights/best.pt
+    yolo_root: data/processed/manga109_yolo_raw
+  - id: panel_input_preprocess_only
+    weights: runs/detect/manga109_preprocess_only/weights/best.pt
+    yolo_root: data/processed/manga109_yolo_preprocess_only
+  - id: panel_input_preprocess_edges
+    weights: runs/detect/manga109_preprocess_edges/weights/best.pt
+    yolo_root: data/processed/manga109_yolo_preprocess_edges
+  - id: panel_input_preprocess_repair_edges
+    weights: runs/detect/manga109_preprocess_repair_edges/weights/best.pt
+    yolo_root: data/processed/manga109_yolo_preprocess_repair_edges
+  - id: panel_input_edges_repair_only
+    weights: runs/detect/manga109_edges_repair_only/weights/best.pt
+    yolo_root: data/processed/manga109_yolo_edges_repair_only
+
+  # - id: my_full_train_stratified
+  #   weights: runs/detect/manga109_strat/weights/best.pt
+  #   yolo_root: data/processed/manga109_yolo_full_strat

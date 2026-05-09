@@ -31,9 +31,17 @@ import yaml
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import cv2
 from tqdm import tqdm
 
 from manga109_loader import Manga109Loader, Manga109Page
+
+from pipeline_yolo_export import (
+    RAW,
+    IMAGE_VARIANT_CHOICES,
+    VARIANT_LABELS,
+    bgr_for_yolo_variant,
+)
 
 
 CLASS_MAP = {
@@ -69,6 +77,7 @@ def write_split(
     split_name: str,
     output_dir: Path,
     copy_images: bool = True,
+    image_variant: str = RAW,
 ) -> int:
     """
     Writes images and label files for one split (train/val/test).
@@ -92,7 +101,14 @@ def write_split(
         dst_lbl = lbl_dir / f"{stem}.txt"
 
         if copy_images:
-            shutil.copy2(src, dst_img)
+            if image_variant == RAW:
+                shutil.copy2(src, dst_img)
+            else:
+                img = cv2.imread(str(src), cv2.IMREAD_COLOR)
+                if img is None:
+                    continue
+                out = bgr_for_yolo_variant(img, image_variant)
+                cv2.imwrite(str(dst_img), out)
 
         lines = page_to_yolo_lines(page)
         dst_lbl.write_text("\n".join(lines))
@@ -133,6 +149,7 @@ def write_experiment_manifest(
     n_train: int,
     n_val: int,
     n_test: int,
+    image_variant: str,
 ) -> Path:
     """Record split + hyperparameters so each trained model can be tied to one combination."""
     payload: Dict[str, Any] = {
@@ -154,6 +171,8 @@ def write_experiment_manifest(
         "n_pages_written": {"train": n_train, "val": n_val, "test": n_test},
         "evaluation_note": "Run evaluate_yolo_panels.py on val/test images using the same "
         "Manga109 data_root so <frame> boxes are ground-truth panels.",
+        "image_variant": image_variant,
+        "image_variant_label": VARIANT_LABELS.get(image_variant, image_variant),
     }
     path = output_dir / "experiment_manifest.json"
     path.write_text(json.dumps(payload, indent=2))
@@ -170,6 +189,7 @@ def convert(
     split_mode: str = "random",
     max_books: Optional[int] = None,
     experiment_id: Optional[str] = None,
+    image_variant: str = RAW,
 ):
     """
     Pipeline: load Manga109 → split → write YOLO dataset.
@@ -219,16 +239,29 @@ def convert(
     print(f"  val   pages : {len(val_pages)}")
     print(f"  test  pages : {len(test_pages)}")
 
+    if image_variant not in IMAGE_VARIANT_CHOICES:
+        raise ValueError(
+            f"image_variant must be one of {IMAGE_VARIANT_CHOICES!r}, got {image_variant!r}"
+        )
+
     print(f"\nWriting YOLO dataset to {output_dir} ...")
-    n_train = write_split(train_pages, "train", output_dir, copy_images)
-    n_val   = write_split(val_pages,   "val",   output_dir, copy_images)
-    n_test  = write_split(test_pages,  "test",  output_dir, copy_images)
+    print(f"  image_variant: {image_variant} — {VARIANT_LABELS.get(image_variant, '')}")
+    n_train = write_split(
+        train_pages, "train", output_dir, copy_images, image_variant=image_variant
+    )
+    n_val = write_split(
+        val_pages, "val", output_dir, copy_images, image_variant=image_variant
+    )
+    n_test = write_split(
+        test_pages, "test", output_dir, copy_images, image_variant=image_variant
+    )
 
     yaml_path = write_dataset_yaml(output_dir)
 
     eid = experiment_id or (
         f"{split_mode}_seed{seed}"
         + (f"_Books{len(loader.books)}" if subset is None else f"_Subset{max_books}")
+        + ("" if image_variant == RAW else f"_{image_variant}")
     )
     man_path = write_experiment_manifest(
         output_dir,
@@ -246,6 +279,7 @@ def convert(
         n_train=n_train,
         n_val=n_val,
         n_test=n_test,
+        image_variant=image_variant,
     )
 
     print(f"\nDone.")
@@ -297,16 +331,28 @@ if __name__ == "__main__":
         default=None,
         help="Stable name for README / comparisons (stored in experiment_manifest.json).",
     )
+    parser.add_argument(
+        "--image-variant",
+        choices=IMAGE_VARIANT_CHOICES,
+        default=RAW,
+        help=(
+            "How to derive each saved page image: "
+            "raw=original JPEG; preprocess_only=grayscale after adaptive preprocess; "
+            "preprocess_edges / preprocess_repair_edges = Canny map (± morph repair); "
+            "edges_repair_only = same on raw gray without stage-2 preprocess."
+        ),
+    )
     args = parser.parse_args()
 
     convert(
-        data_root       = args.data_root,
-        output_dir      = args.output_dir,
-        train_ratio     = args.train_ratio,
-        val_ratio       = args.val_ratio,
-        copy_images     = not args.no_copy_images,
-        seed            = args.seed,
-        split_mode      = args.split_mode,
-        max_books       = args.max_books,
-        experiment_id   = args.experiment_id,
+        data_root=args.data_root,
+        output_dir=args.output_dir,
+        train_ratio=args.train_ratio,
+        val_ratio=args.val_ratio,
+        copy_images=not args.no_copy_images,
+        seed=args.seed,
+        split_mode=args.split_mode,
+        max_books=args.max_books,
+        experiment_id=args.experiment_id,
+        image_variant=args.image_variant,
     )

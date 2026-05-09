@@ -4,7 +4,9 @@ outputs/
 *.pt
 yolov8*.pt
 __pycache__/
-information/
+# Keep information/figures/ and benchmark_runs *.yaml tracked; omit large benchmark logs only
+information/benchmark_runs/*.log
+information/figures/*.png
 .venv/
 venv/
 .DS_Store

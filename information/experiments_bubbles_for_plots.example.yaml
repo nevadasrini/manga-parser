@@ -1,0 +1,22 @@
+# Copy to experiments_bubbles_for_plots.yaml and point weights + yolo_root at runs that train BOTH classes.
+
+data_root: data/raw/manga109/Manga109_released_2023_12_07
+iou: 0.5
+conf: 0.25
+task: bubble
+bubble_class: 1
+panel_class: 0
+splits:
+  - train
+  - val
+  - test
+
+# output_suffix defaults to ``bubble`` when task is bubble; override if needed.
+
+experiments:
+  - id: yolov8n_bubbles_example
+    weights: runs/detect/manga109_yolov8n/weights/best.pt
+    yolo_root: data/processed/manga109_yolo
+  - id: yolov8s_bubbles_example
+    weights: runs/detect/manga109_yolov8s/weights/best.pt
+    yolo_root: data/processed/manga109_yolo

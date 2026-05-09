@@ -1,0 +1,32 @@
+# Paths are relative to manga-parser/. Rows with missing weights are skipped by plot_training_comparisons.py.
+data_root: data/raw/manga109/Manga109_released_2023_12_07
+iou: 0.5
+conf: 0.25
+panel_class: 0
+splits:
+  - train
+  - val
+  - test
+
+experiments:
+  # Remove the smoke row below when you only want the five pipeline-input comparisons.
+  - id: smoke_random_b10_epoch1
+    weights: runs/detect/runs/manga109_smoke/weights/best.pt
+    yolo_root: data/processed/manga109_yolo_smoke
+
+  # Pipeline image variants (export_all_image_variants.py → train_all_image_variants.sh)
+  - id: panel_input_raw
+    weights: runs/detect/manga109_raw/weights/best.pt
+    yolo_root: data/processed/manga109_yolo_raw
+  - id: panel_input_preprocess_only
+    weights: runs/detect/manga109_preprocess_only/weights/best.pt
+    yolo_root: data/processed/manga109_yolo_preprocess_only
+  - id: panel_input_preprocess_edges
+    weights: runs/detect/manga109_preprocess_edges/weights/best.pt
+    yolo_root: data/processed/manga109_yolo_preprocess_edges
+  - id: panel_input_preprocess_repair_edges
+    weights: runs/detect/manga109_preprocess_repair_edges/weights/best.pt
+    yolo_root: data/processed/manga109_yolo_preprocess_repair_edges
+  - id: panel_input_edges_repair_only
+    weights: runs/detect/manga109_edges_repair_only/weights/best.pt
+    yolo_root: data/processed/manga109_yolo_edges_repair_only

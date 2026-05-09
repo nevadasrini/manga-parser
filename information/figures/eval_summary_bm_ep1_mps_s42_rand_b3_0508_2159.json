@@ -1,0 +1,112 @@
+[
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_raw",
+    "split": "val",
+    "precision": 0.1604,
+    "recall": 0.9496,
+    "f1": 0.2744,
+    "tp": 546,
+    "fp": 2859,
+    "fn": 29
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_raw",
+    "split": "test",
+    "precision": 0.2326,
+    "recall": 0.9405,
+    "f1": 0.3729,
+    "tp": 917,
+    "fp": 3026,
+    "fn": 58
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_preprocess_only",
+    "split": "val",
+    "precision": 0.1705,
+    "recall": 0.9565,
+    "f1": 0.2894,
+    "tp": 550,
+    "fp": 2676,
+    "fn": 25
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_preprocess_only",
+    "split": "test",
+    "precision": 0.2491,
+    "recall": 0.9405,
+    "f1": 0.3939,
+    "tp": 917,
+    "fp": 2764,
+    "fn": 58
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_preprocess_edges",
+    "split": "val",
+    "precision": 0.1608,
+    "recall": 0.9165,
+    "f1": 0.2736,
+    "tp": 527,
+    "fp": 2750,
+    "fn": 48
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_preprocess_edges",
+    "split": "test",
+    "precision": 0.2228,
+    "recall": 0.9056,
+    "f1": 0.3576,
+    "tp": 883,
+    "fp": 3080,
+    "fn": 92
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_preprocess_repair_edges",
+    "split": "val",
+    "precision": 0.263,
+    "recall": 0.8017,
+    "f1": 0.396,
+    "tp": 461,
+    "fp": 1292,
+    "fn": 114
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_preprocess_repair_edges",
+    "split": "test",
+    "precision": 0.2949,
+    "recall": 0.8287,
+    "f1": 0.435,
+    "tp": 808,
+    "fp": 1932,
+    "fn": 167
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_edges_repair_only",
+    "split": "val",
+    "precision": 0.263,
+    "recall": 0.8017,
+    "f1": 0.396,
+    "tp": 461,
+    "fp": 1292,
+    "fn": 114
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_edges_repair_only",
+    "split": "test",
+    "precision": 0.2949,
+    "recall": 0.8287,
+    "f1": 0.435,
+    "tp": 808,
+    "fp": 1932,
+    "fn": 167
+  }
+]

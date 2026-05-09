@@ -269,6 +269,40 @@ class Manga109Loader:
     def get_book(self, title: str) -> Manga109Book:
         return self.books[title]
 
+    @staticmethod
+    def _ensure_non_empty_splits(
+        train: List[str],
+        val: List[str],
+        test: List[str],
+        *,
+        n_books: int,
+    ) -> Tuple[List[str], List[str], List[str]]:
+        """
+        Integer ratio truncation can yield **zero validation books** when only a few volumes are
+        loaded (e.g. ``max-books=3``). YOLO training still expects ``images/val`` to exist and be
+        non-empty. When ``n_books >= 2``, guarantee at least one val book; when ``n_books >= 3``,
+        also try to keep at least one held-out test book for benchmark evaluation.
+        """
+        tr, va, te = list(train), list(val), list(test)
+
+        while n_books >= 2 and len(va) == 0:
+            if len(tr) > 1:
+                va.append(tr.pop())
+            elif len(te) > 0:
+                va.append(te.pop())
+            else:
+                break
+
+        while n_books >= 3 and len(te) == 0:
+            if len(tr) > 1:
+                te.append(tr.pop())
+            elif len(va) > 1:
+                te.append(va.pop())
+            else:
+                break
+
+        return tr, va, te
+
     def get_split(
         self,
         ratio: Tuple[float, float, float] = (0.7, 0.15, 0.15),
@@ -285,9 +319,12 @@ class Manga109Loader:
 
         n = len(titles)
         train_end = int(n * ratio[0])
-        val_end   = train_end + int(n * ratio[1])
+        val_end = train_end + int(n * ratio[1])
 
-        return titles[:train_end], titles[train_end:val_end], titles[val_end:]
+        tr = titles[:train_end]
+        va = titles[train_end:val_end]
+        te = titles[val_end:]
+        return Manga109Loader._ensure_non_empty_splits(tr, va, te, n_books=n)
 
     def book_panel_density_proxy(self, title: str) -> float:
         """
@@ -342,7 +379,7 @@ class Manga109Loader:
             splits[j].append(title)
             counts[j] += 1
 
-        return train, val, test
+        return Manga109Loader._ensure_non_empty_splits(train, val, test, n_books=n)
 
     def pages_for_split(
         self,

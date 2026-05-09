@@ -1,16 +1,13 @@
-"""Shared evaluation logic for panel (YOLO ``frame``) vs Manga109 ``<frame>`` GT."""
+"""Greedy IoU evaluation: YOLO detections vs Manga109 GT (panels / ``<frame>`` or bubbles / ``<text>``)."""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from tqdm import tqdm
-from ultralytics import YOLO
-
-from manga109_loader import Manga109Loader
+from manga109_loader import Manga109Loader, Manga109Page
 
 STEM_RE = re.compile(r"^(.+)_(\d{3})$")
 
@@ -30,7 +27,7 @@ def xyxy_iou(a: Sequence[float], b: Sequence[float]) -> float:
     return float(inter / union) if union > 0 else 0.0
 
 
-def gt_frame_boxes_xyxy(page) -> List[Tuple[float, float, float, float]]:
+def gt_frame_boxes_xyxy(page: Manga109Page) -> List[Tuple[float, float, float, float]]:
     out: List[Tuple[float, float, float, float]] = []
     for ann in page.frames:
         b = ann.bbox
@@ -38,7 +35,16 @@ def gt_frame_boxes_xyxy(page) -> List[Tuple[float, float, float, float]]:
     return out
 
 
-def find_page(loader: Manga109Loader, book: str, page_index: int):
+def gt_text_boxes_xyxy(page: Manga109Page) -> List[Tuple[float, float, float, float]]:
+    """Manga109 ``<text>`` regions (speech bubbles / captions)."""
+    out: List[Tuple[float, float, float, float]] = []
+    for ann in page.texts:
+        b = ann.bbox
+        out.append((float(b.xmin), float(b.ymin), float(b.xmax), float(b.ymax)))
+    return out
+
+
+def find_page(loader: Manga109Loader, book: str, page_index: int) -> Optional[Manga109Page]:
     bk = loader.books.get(book)
     if bk is None:
         return None
@@ -109,7 +115,7 @@ class PanelEvalResult:
     experiment_id: str
 
 
-def evaluate_panel_split(
+def evaluate_detection_split(
     *,
     weights: Path,
     yolo_root: Path,
@@ -118,29 +124,33 @@ def evaluate_panel_split(
     images_dir: Optional[Path] = None,
     iou: float = 0.5,
     conf: float = 0.25,
-    panel_class: int = 0,
+    yolo_class_id: int = 0,
+    loader_categories: Optional[set] = None,
+    gt_boxes_xyxy: Callable[[Manga109Page], List[Tuple[float, float, float, float]]] = gt_frame_boxes_xyxy,
     experiment_id: str = "",
     show_progress: bool = False,
     model=None,
     loader=None,
 ) -> PanelEvalResult:
     """
-    Run greedy IoU matching for YOLO class ``panel_class`` vs Manga109 ``<frame>`` boxes.
-    Reuses ``loader`` / ``model`` across splits if passed (caller owns lifecycle).
+    Greedy IoU matching for one YOLO ``class id`` vs GT boxes extracted from XML via ``gt_boxes_xyxy``.
     """
     img_root = images_dir if images_dir is not None else (yolo_root / "images" / split)
     if not img_root.is_dir():
         raise FileNotFoundError(f"Missing image folder: {img_root}")
 
+    from tqdm import tqdm
+    from ultralytics import YOLO
+
     jpgs = sorted(img_root.glob("*.jpg"))
     if not jpgs:
         raise FileNotFoundError(f"No JPGs under {img_root}")
 
-    loader = loader or Manga109Loader(str(data_root), categories={"frame"})
+    cats = loader_categories if loader_categories is not None else {"frame"}
+    loader = loader or Manga109Loader(str(data_root), categories=cats)
     model = model or YOLO(str(weights))
 
-    tqdm_kw = dict(desc=f"{experiment_id}:{split}", leave=False)
-    iterable = tqdm(jpgs, **tqdm_kw) if show_progress else jpgs
+    iterable = tqdm(jpgs, desc=f"{experiment_id}:{split}", leave=False) if show_progress else jpgs
 
     tp_total = fp_total = fn_total = 0
     skipped = 0
@@ -156,7 +166,7 @@ def evaluate_panel_split(
             skipped += 1
             continue
 
-        gts = gt_frame_boxes_xyxy(page)
+        gts = gt_boxes_xyxy(page)
         res = model.predict(str(img_path), conf=conf, verbose=False)
         preds: List[Tuple[float, float, float, float]] = []
         if res and len(res):
@@ -165,7 +175,7 @@ def evaluate_panel_split(
                 xyxy_b = boxes.xyxy.cpu().numpy()
                 cls = boxes.cls.cpu().numpy().astype(int)
                 for row, cl in zip(xyxy_b, cls):
-                    if cl == panel_class:
+                    if int(cl) == yolo_class_id:
                         preds.append(tuple(map(float, row)))
 
         nt, nf, nfl = match_greedy(gts, preds, iou)
@@ -188,6 +198,74 @@ def evaluate_panel_split(
         skipped=skipped,
         split=split,
         experiment_id=experiment_id or weights.stem,
+    )
+
+
+def evaluate_panel_split(
+    *,
+    weights: Path,
+    yolo_root: Path,
+    split: str,
+    data_root: Path,
+    images_dir: Optional[Path] = None,
+    iou: float = 0.5,
+    conf: float = 0.25,
+    panel_class: int = 0,
+    experiment_id: str = "",
+    show_progress: bool = False,
+    model=None,
+    loader=None,
+) -> PanelEvalResult:
+    """YOLO class ``panel_class`` vs Manga109 ``<frame>`` panels."""
+    return evaluate_detection_split(
+        weights=weights,
+        yolo_root=yolo_root,
+        split=split,
+        data_root=data_root,
+        images_dir=images_dir,
+        iou=iou,
+        conf=conf,
+        yolo_class_id=panel_class,
+        loader_categories={"frame"},
+        gt_boxes_xyxy=gt_frame_boxes_xyxy,
+        experiment_id=experiment_id,
+        show_progress=show_progress,
+        model=model,
+        loader=loader,
+    )
+
+
+def evaluate_bubble_split(
+    *,
+    weights: Path,
+    yolo_root: Path,
+    split: str,
+    data_root: Path,
+    images_dir: Optional[Path] = None,
+    iou: float = 0.5,
+    conf: float = 0.25,
+    bubble_class: int = 1,
+    experiment_id: str = "",
+    show_progress: bool = False,
+    model=None,
+    loader=None,
+) -> PanelEvalResult:
+    """YOLO class ``bubble_class`` (default ``1`` = ``text``) vs Manga109 ``<text>`` bubbles."""
+    return evaluate_detection_split(
+        weights=weights,
+        yolo_root=yolo_root,
+        split=split,
+        data_root=data_root,
+        images_dir=images_dir,
+        iou=iou,
+        conf=conf,
+        yolo_class_id=bubble_class,
+        loader_categories={"text"},
+        gt_boxes_xyxy=gt_text_boxes_xyxy,
+        experiment_id=experiment_id,
+        show_progress=show_progress,
+        model=model,
+        loader=loader,
     )
 
 
