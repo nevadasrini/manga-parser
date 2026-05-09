@@ -2,6 +2,8 @@
 
 Tools to load **Manga109** from a local folder (XML + images), convert **panels (`frame`) and speech bubbles (`text`)** to **YOLO** labels, and train **Ultralytics YOLOv8** on that dataset.
 
+**CNN / training variables glossary + val vs test comparison figures:** see [`information/cnn_training_variables.md`](information/cnn_training_variables.md) and regenerated plots under **`information/figures/`** (`plot_training_comparisons.py`).
+
 This repo does **not** call `datasets.load_dataset` itself. You **download** data with the Hugging Face CLI (or copy an official release), then point scripts at the directory that contains **`images/`** and **`annotations/`**.
 
 ---
@@ -92,8 +94,10 @@ cd manga-parser
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
-pip install ultralytics opencv-python pyyaml tqdm matplotlib torch
+pip install -r requirements.txt
 ```
+
+(or `pip install ultralytics opencv-python pyyaml tqdm matplotlib torch` — see `requirements.txt`)
 
 - **GPU training:** install a CUDA-enabled `torch` build for your system; `train_yolo.py` uses `device=0`.  
 - **CPU only:** change `device=0` to `device="cpu"` in `train_yolo.py` (training will be slow).
@@ -135,13 +139,81 @@ python test_convert.py
 
 ---
 
-## 5. What each file is for
+## 5. Recording experiments — split combination, train, evaluate on annotations
+
+Each YOLO export writes **`experiment_manifest.json`** next to **`dataset.yaml`**. That file locks the **combination you trained on**: `split_mode`, `seed`, book lists, ratios, subset size (`max_books` if used), and which YOLO class id is **panel** (`frame` = 0). **Reuse the same `--data-root` and YAML when training** so `train`/`val`/`test` books match.
+
+### Train (one run per manifest / comparison)
+
+Pick a **`--name`** (or **`--experiment-id`** at convert time) per condition so checkpoints do not overwrite each other:
+
+```bash
+python train_yolo.py \
+  --data data/processed/manga109_yolo_smoke/dataset.yaml \
+  --epochs 50 --batch 16 --imgsz 640 --workers 4 \
+  --device 0 \
+  --name manga109_mycondition
+```
+
+Checkpoints appear under **`runs/detect/<name>/weights/`** (`best.pt`, `last.pt`). Use **`--epochs 1`** … only for pipeline smoke tests.
+
+### Evaluate **panels** vs Manga109 **`<frame>`** XML (same val/test images as export)
+
+ **`evaluate_yolo_panels.py`** maps each **`BookName_page.jpg`** stem back to annotations, keeps only YOLO class **0 = frame**, and reports **precision / recall / F1** with **greedy IoU matching** per page (IoU≥0.5 by default — not identical to Ultralytics’ mAP, but matches your “compare to annotations” story).
+
+```bash
+python evaluate_yolo_panels.py \
+  --weights runs/detect/manga109_smoke/weights/best.pt \
+  --yolo-root data/processed/manga109_yolo_smoke \
+  --split val \
+  --data-root data/raw/manga109/Manga109_released_2023_12_07 \
+  --iou 0.5 --conf 0.25
+```
+
+If you trained with **`--project runs`** (legacy), weights may live under **`runs/detect/runs/<name>/weights/`** instead.
+
+Use **`--split test`** for held-out volumes from the manifest. To compare runs, fix **`--iou`**, **`--conf`**, split, and the manifest **`seed`/mode**.
+
+### Reference run (logged in-repo — subset + 1 epoch, not a benchmark)
+
+These numbers are **illustrative** (10 books alphabetically, 1 epoch, small `imgsz=320`). Re-train fully for thesis-quality metrics.
+
+| Field | Value |
+|--------|--------|
+| **`experiment_id`** | `smoke_random_s42_books10` |
+| **Combination** | `split_mode=random`, `seed=42`, **`--max-books 10`** (first 10 titles A→Z), ratios 70/15/15 train/val/test by **book**. |
+| **`experiment_manifest.json`** | `data/processed/manga109_yolo_smoke/experiment_manifest.json` |
+| **Train command** | `python train_yolo.py --data data/processed/manga109_yolo_smoke/dataset.yaml --epochs 1 --batch 4 --imgsz 320 --device cpu --name manga109_smoke --exist-ok --workers 0` |
+| **Checkpoint** *(path from that run)* | `runs/detect/runs/manga109_smoke/weights/best.pt` — *older Ultralytics nesting; newer defaults use `--project runs/detect` → `runs/detect/<name>/`* |
+| **Panel vs `<frame>` (val), greedy IoU=0.5** | Precision **0.541**, Recall **0.789**, F1 **0.642** (104 images); TP/FP/FN = **761 / 646 / 203** |
+
+To compare **stratified** vs **random** on the **same** 10-book subset:
+
+```bash
+python convert_manga109_to_yolo.py --max-books 10 --seed 42 --split-mode stratified \
+  --output_dir data/processed/manga109_yolo_smoke_strat --experiment-id smoke_stratified_s42_books10
+python train_yolo.py --data data/processed/manga109_yolo_smoke_strat/dataset.yaml --name manga109_strat ...
+python evaluate_yolo_panels.py --weights runs/detect/manga109_strat/weights/best.pt \
+  --yolo-root data/processed/manga109_yolo_smoke_strat --split val --data-root data/raw/manga109/Manga109_released_2023_12_07
+```
+
+For **all 109 books**, omit **`--max-books`**, use a new **`--output_dir`** and **`--experiment-id`**, then full training.
+
+---
+
+## 6. What each file is for
 
 | File | Purpose |
 |------|--------|
 | **`manga109_loader.py`** | Core loader: reads **`annotations/*.xml`**, maps each page to **`images/<book>/<idx>.jpg`**, parses **`frame`** (panel), **`text`** (bubble), **`face`**, **`body`**. **`get_split()`** (random book shuffle), **`get_split_stratified_by_panel_density()`**, **`book_panel_density_proxy()`**, **`pages_for_split()`**. Run as script for stats + sample. |
-| **`convert_manga109_to_yolo.py`** | Load Manga109 → **book-level** train/val/test → YOLO folders + **`dataset.yaml`**. **`--split-mode random|stratified`**. **Skips `000.jpg` (cover).** Other CLI: `--data_root`, `--output_dir`, `--no_copy_images`, ratios, `--seed`. |
-| **`train_yolo.py`** | Fine-tunes **`yolov8s.pt`** on **`data/processed/manga109_yolo/dataset.yaml`** (epochs, batch, augmentations, `runs/manga109`). |
+| **`convert_manga109_to_yolo.py`** | Load Manga109 → **book-level** train/val/test → YOLO folders + **`dataset.yaml`** + **`experiment_manifest.json`**. **`--split-mode`**, **`--max-books`**, **`--experiment-id`**, **`--seed`**, ratios. **Skips `000.jpg` (cover).** |
+| **`train_yolo.py`** | Fine-tunes **`yolov8s.pt`**. CLI: **`--data`**, **`--weights`**, **`--epochs`**, **`--batch`**, **`--imgsz`**, **`--device`**, **`--project`** (default `runs/detect`), **`--name`**, **`--exist-ok`**, **`--workers`**. |
+| **`evaluate_yolo_panels.py`** | **Panel (class 0)** vs Manga109 **`<frame>`** GT — calls **`panel_eval_lib`**. |
+| **`panel_eval_lib.py`** | Shared evaluator used by **`evaluate_yolo_panels.py`** and **`information/plot_training_comparisons.py`**. |
+| **`information/plot_training_comparisons.py`** | Reads **`information/experiments_for_plots.yaml`**, draws **bar + TP/FP/FN matrices** (`information/figures/*.png`) + **`eval_summary.json`**. |
+| **`information/cnn_training_variables.md`** | What each CNN / split / eval variable means and why. |
+| **`information/experiments_for_plots.yaml`** | List checkpoints + **`yolo_root`** per experiment to compare (copy from **`.example.yaml`**). |
+| **`requirements.txt`** | Pin-style deps for `pip install -r requirements.txt`. |
 | **`tester.py`** | Minimal smoke test: constructs `Manga109Loader` on the default `data_root` and prints **`print_stats()`**. |
 | **`test_convert.py`** | Calls **`convert()`** with fixed `data_root` / `output_dir` (same as a one-shot conversion). |
 | **`test_labels.py`** | Prints a few **train** label `.txt` files and first line (sanity check after conversion). |
@@ -152,6 +224,6 @@ python test_convert.py
 
 ---
 
-## 6. License reminder
+## 7. License reminder
 
-Manga109 is **gated** and **academically licensed**. Use only under the terms you agreed to on the Hub (no redistribution, proper attribution, etc.). Do not commit **`hf_` tokens** or other secrets into git.
+Manga109 is **gated** and **academically licensed**.

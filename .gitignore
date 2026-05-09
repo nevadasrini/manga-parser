@@ -2,6 +2,7 @@ data/
 runs/
 outputs/
 *.pt
+yolov8*.pt
 __pycache__/
 information/
 .venv/

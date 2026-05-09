@@ -143,7 +143,7 @@ def write_experiment_manifest(
         "seed": seed,
         "train_ratio": train_ratio,
         "val_ratio": val_ratio,
-        "test_ratio": test_ratio,
+        "test_ratio": round(float(test_ratio), 6),
         "max_books": max_books,
         "train_books": sorted(train_books),
         "val_books": sorted(val_books),

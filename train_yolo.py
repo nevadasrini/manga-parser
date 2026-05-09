@@ -27,7 +27,8 @@ def main() -> None:
         default=None,
         help="e.g. 0 / 0,1 / cpu (omit to let Ultralytics auto-pick GPU if available)",
     )
-    p.add_argument("--project", default="runs")
+    # Ultralytics stores under ``{project}/{task}/{name}/`` (e.g. ``runs/detect/<name>/``).
+    p.add_argument("--project", default="runs/detect")
     p.add_argument("--name", default="manga109")
     p.add_argument("--exist-ok", action="store_true", help="Allow overwriting existing run folder")
     p.add_argument(
