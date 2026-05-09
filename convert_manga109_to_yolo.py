@@ -3,6 +3,8 @@ convert_manga109_to_yolo.py
 
 Converts Manga109 annotations to YOLO format for YOLOv8 fine-tuning.
 
+Volume covers (``000.jpg``, ``page_index == 0``) are skipped—they are not manga story pages.
+
 Output structure:
     data/processed/manga109_yolo/
         images/
@@ -23,9 +25,12 @@ The split is done at the book level to prevent data leakage between
 pages of the same volume appearing in both train and val.
 """
 
+import json
 import shutil
 import yaml
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+
 from tqdm import tqdm
 
 from manga109_loader import Manga109Loader, Manga109Page
@@ -76,6 +81,8 @@ def write_split(
 
     written = 0
     for page in tqdm(pages, desc=f"  {split_name}", leave=False):
+        if page.is_cover_page:
+            continue
         src = Path(page.image_path)
         if not src.exists():
             continue
@@ -109,6 +116,50 @@ def write_dataset_yaml(output_dir: Path):
     return yaml_path
 
 
+def write_experiment_manifest(
+    output_dir: Path,
+    *,
+    data_root: str,
+    split_mode: str,
+    seed: int,
+    train_ratio: float,
+    val_ratio: float,
+    test_ratio: float,
+    max_books: Optional[int],
+    train_books: List[str],
+    val_books: List[str],
+    test_books: List[str],
+    experiment_id: str,
+    n_train: int,
+    n_val: int,
+    n_test: int,
+) -> Path:
+    """Record split + hyperparameters so each trained model can be tied to one combination."""
+    payload: Dict[str, Any] = {
+        "experiment_id": experiment_id,
+        "data_root": str(Path(data_root).resolve()),
+        "output_dir": str(output_dir.resolve()),
+        "split_mode": split_mode,
+        "seed": seed,
+        "train_ratio": train_ratio,
+        "val_ratio": val_ratio,
+        "test_ratio": test_ratio,
+        "max_books": max_books,
+        "train_books": sorted(train_books),
+        "val_books": sorted(val_books),
+        "test_books": sorted(test_books),
+        "class_names": CLASS_NAMES,
+        "panel_detection_class_id": CLASS_MAP["frame"],
+        "text_detection_class_id": CLASS_MAP["text"],
+        "n_pages_written": {"train": n_train, "val": n_val, "test": n_test},
+        "evaluation_note": "Run evaluate_yolo_panels.py on val/test images using the same "
+        "Manga109 data_root so <frame> boxes are ground-truth panels.",
+    }
+    path = output_dir / "experiment_manifest.json"
+    path.write_text(json.dumps(payload, indent=2))
+    return path
+
+
 def convert(
     data_root: str,
     output_dir: str,
@@ -116,26 +167,47 @@ def convert(
     val_ratio:   float = 0.15,
     copy_images: bool  = True,
     seed: int = 42,
+    split_mode: str = "random",
+    max_books: Optional[int] = None,
+    experiment_id: Optional[str] = None,
 ):
     """
     Pipeline: load Manga109 → split → write YOLO dataset.
+
+    ``split_mode``:
+        ``random`` — shuffle book titles (default).
+        ``stratified`` — books sorted by mean panels-per-story-page proxy; greedy assignment
+        so train/val/test each get a similar mix of panel-dense vs sparse volumes.
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    subset: Optional[List[str]] = None
+    if max_books is not None and max_books > 0:
+        probe = Manga109Loader(data_root, categories={"frame", "text"})
+        subset = sorted(probe.books.keys())[: int(max_books)]
+        print(f"Subset mode: loading {len(subset)} books (max_books={max_books})")
+
     print("Loading Manga109 annotations...")
     loader = Manga109Loader(
         data_root,
+        books=subset,
         categories={"frame", "text"},  # this what we need for YOLO
     )
     loader.print_stats()
 
     print("\nSplitting by book...")
     test_ratio = 1.0 - train_ratio - val_ratio
-    train_titles, val_titles, test_titles = loader.get_split(
-        ratio=(train_ratio, val_ratio, test_ratio),
-        seed=seed,
-    )
+    ratio_tuple = (train_ratio, val_ratio, test_ratio)
+    if split_mode == "random":
+        train_titles, val_titles, test_titles = loader.get_split(ratio=ratio_tuple, seed=seed)
+    elif split_mode == "stratified":
+        train_titles, val_titles, test_titles = loader.get_split_stratified_by_panel_density(
+            ratio=ratio_tuple, seed=seed
+        )
+        print("  (stratified split: balanced by mean <frame> count per story page per book)")
+    else:
+        raise ValueError(f"Unknown split_mode: {split_mode!r} (use 'random' or 'stratified')")
     print(f"  train books : {len(train_titles)}")
     print(f"  val   books : {len(val_titles)}")
     print(f"  test  books : {len(test_titles)}")
@@ -154,11 +226,34 @@ def convert(
 
     yaml_path = write_dataset_yaml(output_dir)
 
+    eid = experiment_id or (
+        f"{split_mode}_seed{seed}"
+        + (f"_Books{len(loader.books)}" if subset is None else f"_Subset{max_books}")
+    )
+    man_path = write_experiment_manifest(
+        output_dir,
+        data_root=data_root,
+        split_mode=split_mode,
+        seed=seed,
+        train_ratio=train_ratio,
+        val_ratio=val_ratio,
+        test_ratio=test_ratio,
+        max_books=max_books if subset else None,
+        train_books=train_titles,
+        val_books=val_titles,
+        test_books=test_titles,
+        experiment_id=eid,
+        n_train=n_train,
+        n_val=n_val,
+        n_test=n_test,
+    )
+
     print(f"\nDone.")
     print(f"  train : {n_train} pages")
     print(f"  val   : {n_val} pages")
     print(f"  test  : {n_test} pages")
     print(f"  dataset.yaml → {yaml_path}")
+    print(f"  experiment_manifest.json → {man_path}")
 
 
 if __name__ == "__main__":
@@ -185,13 +280,33 @@ if __name__ == "__main__":
     parser.add_argument("--train_ratio", type=float, default=0.70)
     parser.add_argument("--val_ratio",   type=float, default=0.15)
     parser.add_argument("--seed",        type=int,   default=42)
+    parser.add_argument(
+        "--split-mode",
+        choices=("random", "stratified"),
+        default="random",
+        help="Book-level split: random shuffle vs stratified by panel-density proxy (see manga109_loader).",
+    )
+    parser.add_argument(
+        "--max-books",
+        type=int,
+        default=None,
+        help="If set, only the first N books (sorted by title) are converted — faster smoke runs.",
+    )
+    parser.add_argument(
+        "--experiment-id",
+        default=None,
+        help="Stable name for README / comparisons (stored in experiment_manifest.json).",
+    )
     args = parser.parse_args()
 
     convert(
-        data_root   = args.data_root,
-        output_dir  = args.output_dir,
-        train_ratio = args.train_ratio,
-        val_ratio   = args.val_ratio,
-        copy_images = not args.no_copy_images,
-        seed        = args.seed,
+        data_root       = args.data_root,
+        output_dir      = args.output_dir,
+        train_ratio     = args.train_ratio,
+        val_ratio       = args.val_ratio,
+        copy_images     = not args.no_copy_images,
+        seed            = args.seed,
+        split_mode      = args.split_mode,
+        max_books       = args.max_books,
+        experiment_id   = args.experiment_id,
     )

@@ -10,7 +10,17 @@ Annotation schema:
     <body>   — character body bounding box
 
 All elements use xmin/ymin/xmax/ymax (absolute pixels, xyxy format).
+
+Cover pages:
+    Image files are named ``{page_index:03d}.jpg``. Index **0** is the volume cover
+    (**``000.jpg``**). The Manga109 XML has **no** dedicated ``is_cover`` attribute.
+    In practice ``<page index="0" .../>`` is often **empty** (no ``<frame>`` / ``<text>``
+    children), which is a useful heuristic but **not guaranteed** for every book—so
+    code here treats **``page_index == 0``** as the cover by convention.
 """
+
+# Image filename ``000.jpg`` — volume cover; skip for training / preprocessing pipelines.
+MANGA109_COVER_PAGE_INDEX = 0
 
 import os
 import xml.etree.ElementTree as ET
@@ -95,6 +105,28 @@ class Manga109Page:
     def image_name(self) -> str:
         return f"{self.page_index:03d}.jpg"
 
+    @property
+    def is_cover_page(self) -> bool:
+        """Volume cover (``000.jpg``). Manga109 XML does not mark this explicitly."""
+        return self.page_index == MANGA109_COVER_PAGE_INDEX
+
+
+def has_panel_or_text_annotations(page: Manga109Page) -> bool:
+    """
+    True if the page has at least one panel or speech-bubble annotation.
+
+    Covers often have **neither** (empty ``<page>`` in XML), but an empty page is
+    not always a cover—use together with :py:attr:`Manga109Page.is_cover_page` when needed.
+    """
+    return bool(page.frames or page.texts)
+
+
+def iter_story_pages(loader: "Manga109Loader"):
+    """Iterate all pages except the volume cover (``000.jpg`` / ``page_index == 0``)."""
+    for page in loader:
+        if not page.is_cover_page:
+            yield page
+
 
 @dataclass
 class Manga109Book:
@@ -106,6 +138,33 @@ class Manga109Book:
 
     def __iter__(self):
         return iter(self.pages)
+
+def resolve_manga109_root(data_root: Path) -> Path:
+    """
+    If ``data_root/annotations`` is missing, use the first immediate subdirectory that
+    contains ``annotations/``. Hugging Face ``hf download`` often adds one extra folder
+    level (e.g. ``.../Manga109_released_2023_12_07/Manga109_released_2023_12_07/``).
+    """
+    root = Path(data_root)
+    try:
+        root = root.resolve()
+    except OSError:
+        pass
+    if (root / "annotations").is_dir():
+        return root
+    if not root.is_dir():
+        return root
+    for child in sorted(root.iterdir()):
+        if child.is_dir() and not child.name.startswith("."):
+            if (child / "annotations").is_dir():
+                found = child.resolve()
+                print(
+                    f"[Manga109Loader] no annotations under {Path(data_root)!s}; "
+                    f"using nested root {found}"
+                )
+                return found
+    return root
+
 
 class Manga109Loader:
     """
@@ -121,7 +180,7 @@ class Manga109Loader:
         annotation_dir: str = "annotations",
         categories: Optional[set] = None,
     ):
-        self.data_root     = Path(data_root)
+        self.data_root     = resolve_manga109_root(Path(data_root))
         self.image_dir     = self.data_root / "images"
         self.ann_dir       = self.data_root / annotation_dir
         self.categories    = categories or self.ALL_CATEGORIES
@@ -216,7 +275,8 @@ class Manga109Loader:
         seed: int = 42,
     ) -> Tuple[List[str], List[str], List[str]]:
         """
-        Split book titles into train/val/test sets and return (train_titles, val_titles, test_titles)
+        Split **book titles** (not pages) into train/val/test — avoids leakage (pages from the
+        same volume appearing in both train and val).
         """
         import random
         titles = sorted(self.books.keys())
@@ -228,6 +288,61 @@ class Manga109Loader:
         val_end   = train_end + int(n * ratio[1])
 
         return titles[:train_end], titles[train_end:val_end], titles[val_end:]
+
+    def book_panel_density_proxy(self, title: str) -> float:
+        """
+        Proxy for “how panel-heavy” a volume is: mean ``<frame>`` count per **story** page
+        (excludes cover). Use for **stratified** book splits when you do not have manual
+        layout-category labels — balances easy vs dense books across train/val/test.
+        """
+        book = self.books.get(title)
+        if not book:
+            return 0.0
+        counts: List[int] = []
+        for p in book.pages:
+            if p.is_cover_page:
+                continue
+            counts.append(len(p.frames))
+        return float(sum(counts) / len(counts)) if counts else 0.0
+
+    def get_split_stratified_by_panel_density(
+        self,
+        ratio: Tuple[float, float, float] = (0.7, 0.15, 0.15),
+        seed: int = 42,
+    ) -> Tuple[List[str], List[str], List[str]]:
+        """
+        Same book-level train/val/test sizes as :meth:`get_split`, but assigns books using a
+        **greedy fill** on titles sorted by :meth:`book_panel_density_proxy` so each split
+        gets a similar mix of low- and high-density volumes (reduces bias vs one random shuffle
+        when some books are much more panel-rich than others).
+        """
+        titles = sorted(self.books.keys())
+        n = len(titles)
+        if n == 0:
+            return [], [], []
+
+        # Same counts as :meth:`get_split` (integer truncation).
+        train_n = int(n * ratio[0])
+        val_n = int(n * ratio[1])
+        test_n = n - train_n - val_n
+
+        scored = [(self.book_panel_density_proxy(t), t) for t in titles]
+        scored.sort(key=lambda x: (x[0], x[1]))
+
+        train: List[str] = []
+        val: List[str] = []
+        test: List[str] = []
+        splits = (train, val, test)
+        targets = (train_n, val_n, test_n)
+        counts = [0, 0, 0]
+
+        for _proxy, title in scored:
+            deficits = [targets[i] - counts[i] for i in range(3)]
+            j = max(range(3), key=lambda i: deficits[i])
+            splits[j].append(title)
+            counts[j] += 1
+
+        return train, val, test
 
     def pages_for_split(
         self,
@@ -272,10 +387,10 @@ if __name__ == "__main__":
     loader = Manga109Loader(data_root)
     loader.print_stats()
 
-    # show samples from book
+    # show samples from book (skip 000.jpg cover)
     for book in loader.books.values():
-        page = book.pages[0]
-        print(f"\nSample — {book.title}, page {page.page_index}")
+        page = next((p for p in book.pages if not p.is_cover_page), book.pages[0])
+        print(f"\nSample — {book.title}, page {page.page_index} (cover skipped if present)")
         print(f"  Image path : {page.image_path}")
         print(f"  Dimensions : {page.width} x {page.height}")
         print(f"  Panels     : {len(page.frames)}")

@@ -1,4 +1,9 @@
 data/
 runs/
+outputs/
 *.pt
 __pycache__/
+information/
+.venv/
+venv/
+.DS_Store
