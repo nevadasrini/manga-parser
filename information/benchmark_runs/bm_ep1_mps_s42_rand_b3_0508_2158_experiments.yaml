@@ -5,6 +5,7 @@ iou: 0.5
 conf: 0.25
 panel_class: 0
 splits:
+- train
 - val
 - test
 experiments:

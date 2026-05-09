@@ -5,6 +5,10 @@ Build comparison plots for YOLO experiments vs Manga109 GT (panels ``<frame>`` o
 Reads ``experiments_for_plots.yaml`` (or ``--config``), runs evaluation per experiment row,
 writes PNGs into ``information/figures/``.
 
+Each output figure uses **three subplots across** (Precision, Recall, F1). Inside each subplot
+you get **one bar per entry in YAML ``splits``** (e.g. ``train`` / ``val`` / ``test``), shown in the legend.
+Benchmark configs should list ``train`` under ``splits`` if you want training-set precision there.
+
 Usage (from ``manga-parser/``; produces PNG + JSON under ``information/figures/``)::
 
     python information/plot_training_comparisons.py
