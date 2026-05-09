@@ -35,8 +35,8 @@ DEFAULT_NUM_PAGES = 1
 
 # One-page pipeline test without CLI: set both, then ``python preview_manga109_pages.py``.
 # Same as: ``--book ARMS --page 80`` (page = dataset index → file ``080.jpg``).
-SINGLE_TEST_BOOK: Optional[str] = "ARMS"  # e.g. "ARMS"
-SINGLE_TEST_PAGE: Optional[int] = 3  # e.g. 80
+SINGLE_TEST_BOOK: Optional[str] = "DollGun"  # e.g. "ARMS"
+SINGLE_TEST_PAGE: Optional[int] = 10  # e.g. 80
 
 
 def _safe_filename_stem(book: str) -> str:
