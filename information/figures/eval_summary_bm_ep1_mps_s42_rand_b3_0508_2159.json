@@ -2,6 +2,17 @@
   {
     "task": "panel",
     "experiment_id": "panel_input_raw",
+    "split": "train",
+    "precision": 0.2562,
+    "recall": 0.9211,
+    "f1": 0.4009,
+    "tp": 934,
+    "fp": 2711,
+    "fn": 80
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_raw",
     "split": "val",
     "precision": 0.1604,
     "recall": 0.9496,
@@ -20,6 +31,17 @@
     "tp": 917,
     "fp": 3026,
     "fn": 58
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_preprocess_only",
+    "split": "train",
+    "precision": 0.2713,
+    "recall": 0.9231,
+    "f1": 0.4194,
+    "tp": 936,
+    "fp": 2514,
+    "fn": 78
   },
   {
     "task": "panel",
@@ -46,6 +68,17 @@
   {
     "task": "panel",
     "experiment_id": "panel_input_preprocess_edges",
+    "split": "train",
+    "precision": 0.2473,
+    "recall": 0.9132,
+    "f1": 0.3892,
+    "tp": 926,
+    "fp": 2818,
+    "fn": 88
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_preprocess_edges",
     "split": "val",
     "precision": 0.1608,
     "recall": 0.9165,
@@ -68,6 +101,17 @@
   {
     "task": "panel",
     "experiment_id": "panel_input_preprocess_repair_edges",
+    "split": "train",
+    "precision": 0.3025,
+    "recall": 0.8619,
+    "f1": 0.4479,
+    "tp": 874,
+    "fp": 2015,
+    "fn": 140
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_preprocess_repair_edges",
     "split": "val",
     "precision": 0.263,
     "recall": 0.8017,
@@ -86,6 +130,17 @@
     "tp": 808,
     "fp": 1932,
     "fn": 167
+  },
+  {
+    "task": "panel",
+    "experiment_id": "panel_input_edges_repair_only",
+    "split": "train",
+    "precision": 0.3025,
+    "recall": 0.8619,
+    "f1": 0.4479,
+    "tp": 874,
+    "fp": 2015,
+    "fn": 140
   },
   {
     "task": "panel",

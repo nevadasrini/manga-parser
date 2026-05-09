@@ -230,6 +230,7 @@ For **all 109 books**, omit **`--max-books`**, use a new **`--output_dir`** and 
 | **`test_visualize.py`** | Loads one **ARMS** page, draws **panel (blue)** and **text (green)** boxes, saves **`sample_annotations.png`**. |
 | **`test.py`** | Tiny CUDA probe: prints whether **torch** sees a GPU and the device name. |
 | **`preview_manga109_pages.py`** | Browse: first **N** story pages (`DEFAULT_NUM_PAGES`, **`-n`**). Single: **`--book` + `--page`** or **`SINGLE_TEST_*`** constants. Default output **`outputs/preprocess_{Book}_{page:03d}.png`**; override with **`--out`**. **`../cv/src/preprocess.py`** when `cv` sits next to `manga-parser`. |
+| **`preview_manga109_yolo_panels.py`** | One page: run **YOLO panel** preds on **raw → preprocess → edges → repaired edges** (see ``pipeline_yolo_export``). Horizontal strip with boxes; **`--benchmark-id`** loads per-variant **`best.pt`**. **`--fill-alpha`** optional fill. Needs **`ultralytics`** + sibling **`cv/`** for pipeline stages. |
 | **`.gitignore`** | Ignores **`data/`**, **`runs/`**, **`outputs/`**, downloaded **`.pt`** weights, `__pycache__/`. |
 
 ---
